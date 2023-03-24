@@ -9,6 +9,6 @@
     "tasks": [{
         "train_dir": "{scene}",
         "data_dir": "{scene}",
-        "config": "configs/syn.json"
+        "config": "configs/syn_light.json"
     }]
 }
