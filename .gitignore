@@ -3,7 +3,7 @@ __pycache__/
 *$py.class
 Session.vim
 ckpt/
-opt/ckpt_auto
+ckpt_auto/
 build
 .eggs
 svox2.egg-info
