@@ -1,10 +1,9 @@
-
 {
     "eval": true,
     "data_root": "/home/ccl/svox2/opt/testData",
     "train_root": "/home/ccl/svox2/opt/ckpt_auto/256_to_512_fasttv",
     "variables": {
-        "scene": ["images", "pose"]
+        "scene": ["images"]
     },
     "tasks": [{
         "train_dir": "{scene}",
