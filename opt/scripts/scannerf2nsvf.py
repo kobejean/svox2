@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 import argparse
 
-def convert(data_dir : str, out_data_dir : str):
+def convert(data_dir : str, out_data_dir : str, json_files : str):
     """
     Convert Instant-NGP (modified NeRF) data to NSVF
 
@@ -25,49 +25,29 @@ def convert(data_dir : str, out_data_dir : str):
     os.makedirs(images_dir_name, exist_ok=True)
     os.makedirs(pose_dir_name, exist_ok=True)
 
-    # def get_subdir(name):
-    #     if name.endswith("_train.json"):
-    #         return "train"
-    #     elif name.endswith("_val.json"):
-    #         return "val"
-    #     elif name.endswith("_test.json"):
-    #         return "test"
-    #     return ""
-
-    # def get_out_prefix(name):
-    #     if name.endswith("_train.json"):
-    #         return "0_"
-    #     elif name.endswith("_val.json"):
-    #         return "1_"
-    #     elif name.endswith("_test.json"):
-    #         return "2_"
-    #     return ""
-
-    #does not enter any of these if statements 
     def get_subdir(name):
-        if name.startswith("train_"):
-            print ("train")
+        name = os.path.basename(name)
+        if name.startswith("train"):
             return "train_images"
-        elif name.startswith("val_"):
+        elif name.startswith("val"):
             return "val_images"
-        elif name.endswith("test_"):
-            return "train_images"
+        elif name.startswith("test"):
+            return "test_images"
         return ""
 
     def get_out_prefix(name):
-        if name.endswith("_train.json"):
+        name = os.path.basename(name)
+        if name.startswith("train"):
             return "0_"
-        elif name.endswith("_val.json"):
+        elif name.startswith("val"):
             return "1_"
-        elif name.endswith("_test.json"):
+        elif name.startswith("test"):
             return "2_"
         return ""
-    #
-    #
-    #changed from get_subdir(x) to "train_images"
+
     jsons = {
-        x: ("train_images", get_out_prefix(x))
-        for x in glob(os.path.join(data_dir, "*.json"))
+        x: (get_subdir(x), get_out_prefix(x))
+        for x in [os.path.join(data_dir, json_file) for json_file in json_files]
     }
 
     # OpenGL -> OpenCV
@@ -90,6 +70,7 @@ def convert(data_dir : str, out_data_dir : str):
     example_fpath = None
     tj = {}
     for tj_path, (tj_subdir, tj_out_prefix) in jsons.items():
+        print(f"Opened JSON: {tj_path}")
         with open(tj_path, "r") as f:
             tj = json.load(f)
         if "frames" not in tj:
@@ -159,5 +140,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("data_dir", type=str, help="NeRF-NGP data directory")
     parser.add_argument("out_data_dir", type=str, help="Output NSVF data directory")
+    parser.add_argument("--train_json", type=str, default="train_all.json", help="train JSON filename")
+    parser.add_argument("--val_json", type=str, default="val_all.json", help="val JSON filename")
+    parser.add_argument("--test_json", type=str, default="test_all.json", help="test JSON filename")
     args = parser.parse_args()
-    convert(args.data_dir, args.out_data_dir)
+    convert(args.data_dir, args.out_data_dir, [args.train_json, args.val_json, args.test_json])

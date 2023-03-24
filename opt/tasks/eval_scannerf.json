@@ -1,14 +1,13 @@
-
 {
     "eval": true,
-    "data_root": "/home/ccl/VQRF/data/nerf_synthetic",
+    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF/all_100",
     "train_root": "/home/ccl/svox2/opt/ckpt_auto/128_to_256_fasttv",
     "variables": {
-        "scene": ["images", "pose"]
+        "scene": ["airplane1", "airplane2"]
     },
     "tasks": [{
         "train_dir": "{scene}",
         "data_dir": "{scene}",
-        "config": "configs/syn_light.json"
+        "config": "configs/scannerf.json"
     }]
 }
