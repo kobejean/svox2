@@ -80,6 +80,98 @@ args = parser.parse_args()
 config_util.maybe_merge_config_file(args, allow_invalid=True)
 device = 'cuda:0'
 
+
+def render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, render_dir, want_metrics, save_files=True):  
+
+    avg_psnr = 0.0
+    avg_ssim = 0.0
+    avg_lpips = 0.0
+    n_images_gen = 0
+
+    frames = []
+    psnrs = []
+    ssims = []
+    lpips_is = []  
+    for img_id in tqdm(range(0, n_images, img_eval_interval)):
+        dset_h, dset_w = dset.get_image_size(img_id)
+        im_size = dset_h * dset_w
+        w = dset_w if args.crop == 1.0 else int(dset_w * args.crop)
+        h = dset_h if args.crop == 1.0 else int(dset_h * args.crop)
+
+        cam = svox2.Camera(c2ws[img_id],
+                           dset.intrins.get('fx', img_id),
+                           dset.intrins.get('fy', img_id),
+                           dset.intrins.get('cx', img_id) + (w - dset_w) * 0.5,
+                           dset.intrins.get('cy', img_id) + (h - dset_h) * 0.5,
+                           w, h,
+                           ndc_coeffs=dset.ndc_coeffs)
+        im = grid.volume_render_image(cam, use_kernel=True, return_raylen=args.ray_len)
+        if args.ray_len:
+            minv, meanv, maxv = im.min().item(), im.mean().item(), im.max().item()
+            im = viridis_cmap(im.cpu().numpy())
+            cv2.putText(im, f"{minv=:.4f} {meanv=:.4f} {maxv=:.4f}", (10, 20),
+                        0, 0.5, [255, 0, 0])
+            im = torch.from_numpy(im).to(device=device)
+        im.clamp_(0.0, 1.0)
+
+        if not args.render_path:
+            im_gt = dset.gt[img_id].to(device=device)
+            mse = (im - im_gt) ** 2
+            mse_num : float = mse.mean().item()
+            psnr = -10.0 * math.log10(mse_num)
+            avg_psnr += psnr
+            if not args.timing:
+                ssim = compute_ssim(im_gt, im).item()
+                avg_ssim += ssim
+                if not args.no_lpips:
+                    lpips_i = lpips_vgg(im_gt.permute([2, 0, 1]).contiguous(),
+                            im.permute([2, 0, 1]).contiguous(), normalize=True).item()
+                    avg_lpips += lpips_i
+                    print(img_id, 'PSNR', psnr, 'SSIM', ssim, 'LPIPS', lpips_i)
+                    lpips_is.append(lpips_i)
+                else:
+                    print(img_id, 'PSNR', psnr, 'SSIM', ssim)
+                psnrs.append(psnr)
+                ssims.append(ssim)
+        
+        if save_files:
+            img_path = path.join(render_dir, f'{img_id:04d}.png');
+            im = im.cpu().numpy()
+            if not args.render_path:
+                im_gt = dset.gt[img_id].numpy()
+                im = np.concatenate([im_gt, im], axis=1)
+            if not args.timing:
+                im = (im * 255).astype(np.uint8)
+                if not args.no_imsave:
+                    imageio.imwrite(img_path,im)
+                if not args.no_vid:
+                    frames.append(im)
+            im = None
+        n_images_gen += 1
+    
+    if want_metrics and save_files:
+        print('AVERAGES')
+
+        avg_psnr /= n_images_gen
+        with open(path.join(render_dir, 'psnr.txt'), 'w') as f:
+            f.write(str(avg_psnr))
+        print('PSNR:', avg_psnr)
+        if not args.timing:
+            avg_ssim /= n_images_gen
+            print('SSIM:', avg_ssim)
+            with open(path.join(render_dir, 'ssim.txt'), 'w') as f:
+                f.write(str(avg_ssim))
+            if not args.no_lpips:
+                avg_lpips /= n_images_gen
+                print('LPIPS:', avg_lpips)
+                with open(path.join(render_dir, 'lpips.txt'), 'w') as f:
+                    f.write(str(avg_lpips))
+    if not args.no_vid and len(frames) and save_files:
+        vid_path = render_dir + '.mp4'
+        imageio.mimwrite(vid_path, frames, fps=args.fps, macro_block_size=8)  # pip install imageio-ffmpeg
+
+    return frames, np.array(psnrs), np.array(ssims), np.array(lpips_is)
+
 if args.timing:
     args.no_lpips = True
     args.no_vid = True
@@ -148,12 +240,9 @@ if not args.no_imsave:
 # NOTE: no_grad enables the fast image-level rendering kernel for cuvol backend only
 # other backends will manually generate rays per frame (slow)
 with torch.no_grad():
+    n_images_train = dset_train.render_c2w.size(0) if args.render_path else dset_train.n_images
     n_images = dset.render_c2w.size(0) if args.render_path else dset.n_images
     img_eval_interval = max(n_images // args.n_eval, 1)
-    avg_psnr = 0.0
-    avg_ssim = 0.0
-    avg_lpips = 0.0
-    n_images_gen = 0
 
     c2ws_train = dset_train.render_c2w.to(device=device) if args.render_path else dset_train.c2w.to(device=device)
     c2ws = dset.render_c2w.to(device=device) if args.render_path else dset.c2w.to(device=device)
@@ -164,8 +253,9 @@ with torch.no_grad():
     directions_train = directions_train / torch.linalg.vector_norm(directions_train, keepdim=True, dim=1)
     directions = directions / torch.linalg.vector_norm(directions, keepdim=True, dim=1)
     cos_dist = torch.matmul(directions, directions_train.transpose(0,1))
-    cos_dist = torch.max(cos_dist, 1)[0]
+    cos_dist, closest_train_index = torch.max(cos_dist, 1)
     angles = torch.acos(cos_dist).cpu().numpy()
+    closest_train_index = closest_train_index.cpu().numpy()
 
     # DEBUGGING
     #  rad = [1.496031746031746, 1.6613756613756614, 1.0]
@@ -183,72 +273,44 @@ with torch.no_grad():
     #  grid.links[:, :, :LAYER] = -1
     #  grid.links[:, :, LAYER+1:] = -1
 
-    frames = []
     #  im_gt_all = dset.gt.to(device=device)
-    psnrs = []
-    ssims = []
-    lpips_is = []
+    frames, psnrs, ssims, lpips_is = render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, render_dir, want_metrics)
+    frames_train, psnrs_train, ssims_train, lpips_is_train = render_images_and_measure_metrics(dset_train, c2ws_train, n_images_train, 1, render_dir, want_metrics, save_files=False)
 
-    for img_id in tqdm(range(0, n_images, img_eval_interval)):
-        dset_h, dset_w = dset.get_image_size(img_id)
-        im_size = dset_h * dset_w
-        w = dset_w if args.crop == 1.0 else int(dset_w * args.crop)
-        h = dset_h if args.crop == 1.0 else int(dset_h * args.crop)
+    psnr_diff = psnrs_train[closest_train_index] - psnrs
+    ssims_diff = ssims_train[closest_train_index] - ssims
+    lpips_i_diff = lpips_is_train[closest_train_index] - lpips_is
 
-        cam = svox2.Camera(c2ws[img_id],
-                           dset.intrins.get('fx', img_id),
-                           dset.intrins.get('fy', img_id),
-                           dset.intrins.get('cx', img_id) + (w - dset_w) * 0.5,
-                           dset.intrins.get('cy', img_id) + (h - dset_h) * 0.5,
-                           w, h,
-                           ndc_coeffs=dset.ndc_coeffs)
-        im = grid.volume_render_image(cam, use_kernel=True, return_raylen=args.ray_len)
-        if args.ray_len:
-            minv, meanv, maxv = im.min().item(), im.mean().item(), im.max().item()
-            im = viridis_cmap(im.cpu().numpy())
-            cv2.putText(im, f"{minv=:.4f} {meanv=:.4f} {maxv=:.4f}", (10, 20),
-                        0, 0.5, [255, 0, 0])
-            im = torch.from_numpy(im).to(device=device)
-        im.clamp_(0.0, 1.0)
+    
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("PSNR diff (train - test)")
+    plt.scatter(angles,psnr_diff)
+    plt.savefig(path.join(render_dir, 'PSNR_Diff_Angle.png'))
+    plt.cla()
 
-        if not args.render_path:
-            im_gt = dset.gt[img_id].to(device=device)
-            mse = (im - im_gt) ** 2
-            mse_num : float = mse.mean().item()
-            psnr = -10.0 * math.log10(mse_num)
-            avg_psnr += psnr
-            if not args.timing:
-                ssim = compute_ssim(im_gt, im).item()
-                avg_ssim += ssim
-                if not args.no_lpips:
-                    lpips_i = lpips_vgg(im_gt.permute([2, 0, 1]).contiguous(),
-                            im.permute([2, 0, 1]).contiguous(), normalize=True).item()
-                    avg_lpips += lpips_i
-                    print(img_id, 'PSNR', psnr, 'SSIM', ssim, 'LPIPS', lpips_i)
-                    lpips_is.append(lpips_i)
-                else:
-                    print(img_id, 'PSNR', psnr, 'SSIM', ssim)
-                psnrs.append(psnr)
-                ssims.append(ssim)
-        img_path = path.join(render_dir, f'{img_id:04d}.png');
-        im = im.cpu().numpy()
-        if not args.render_path:
-            im_gt = dset.gt[img_id].numpy()
-            im = np.concatenate([im_gt, im], axis=1)
-        if not args.timing:
-            im = (im * 255).astype(np.uint8)
-            if not args.no_imsave:
-                imageio.imwrite(img_path,im)
-            if not args.no_vid:
-                frames.append(im)
-        im = None
-        n_images_gen += 1
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("SSIM diff (train - test)")
+    plt.scatter(angles,ssims_diff)
+    plt.savefig(path.join(render_dir, 'SSIM_Diff_Angle.png'))
+    plt.cla()
+
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("LPIPS diff (train - test)")
+    plt.scatter(angles,lpips_i_diff)
+    plt.savefig(path.join(render_dir, 'LPIPS_Diff_Angle.png'))
+    plt.cla()
+
+
     
     plt.title(f"Scene: {os.path.basename(args.data_dir)}")
     plt.xlabel("Angle from nearest training sample")
     plt.ylabel("PSNR")
     plt.scatter(angles,psnrs)
     plt.savefig(path.join(render_dir, 'PSNR_Angle.png'))
+    plt.cla()
 
 
     plt.title(f"Scene: {os.path.basename(args.data_dir)}")
@@ -256,6 +318,7 @@ with torch.no_grad():
     plt.ylabel("SSIM")
     plt.scatter(angles,ssims)
     plt.savefig(path.join(render_dir, 'SSIM_Angle.png'))
+    plt.cla()
 
 
     plt.title(f"Scene: {os.path.basename(args.data_dir)}")
@@ -263,26 +326,6 @@ with torch.no_grad():
     plt.ylabel("LPIPS")
     plt.scatter(angles,lpips_is)
     plt.savefig(path.join(render_dir, 'LPIPS_Angle.png'))
-
-    if want_metrics:
-        print('AVERAGES')
-
-        avg_psnr /= n_images_gen
-        with open(path.join(render_dir, 'psnr.txt'), 'w') as f:
-            f.write(str(avg_psnr))
-        print('PSNR:', avg_psnr)
-        if not args.timing:
-            avg_ssim /= n_images_gen
-            print('SSIM:', avg_ssim)
-            with open(path.join(render_dir, 'ssim.txt'), 'w') as f:
-                f.write(str(avg_ssim))
-            if not args.no_lpips:
-                avg_lpips /= n_images_gen
-                print('LPIPS:', avg_lpips)
-                with open(path.join(render_dir, 'lpips.txt'), 'w') as f:
-                    f.write(str(avg_lpips))
-    if not args.no_vid and len(frames):
-        vid_path = render_dir + '.mp4'
-        imageio.mimwrite(vid_path, frames, fps=args.fps, macro_block_size=8)  # pip install imageio-ffmpeg
+    plt.cla()
 
 

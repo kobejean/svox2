@@ -1,7 +1,7 @@
 {
     "eval": true,
-    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF/all",
-    "train_root": "/home/ccl/svox2/opt/ckpt_auto/128_to_256_scannerf_all",
+    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF/all_100",
+    "train_root": "/home/ccl/svox2/opt/ckpt_auto/128_to_256_scannerf_all_100",
     "variables": {
         "scene": ["airplane1", "airplane2", "brontosaurus", "bulldozer1", "bulldozer2", "cheetah", "dump_truck1", "dump_truck2", "elephant", "excavator", "forklift", "giraffe", "helicopter1", "helicopter2", "lego", "lion", "plant1", "plant2", "plant3", "plant4", "plant5", "plant6", "plant7", "plant8", "plant9", "roadroller", "shark", "spinosaurus", "stegosaurus", "tiger", "tractor", "trex", "triceratops", "truck", "zebra"]
     },
