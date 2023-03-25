@@ -16,6 +16,7 @@ from util import config_util
 import imageio
 import cv2
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser()
 parser.add_argument('ckpt', type=str)
 
@@ -108,6 +109,8 @@ if args.ray_len:
     render_dir += f'_raylen'
     want_metrics = False
 
+dset_train = datasets[args.dataset_type](args.data_dir, split="train",
+                                    **config_util.build_data_options(args))
 dset = datasets[args.dataset_type](args.data_dir, split="test_train" if args.train else "test",
                                     **config_util.build_data_options(args))
 
@@ -151,7 +154,19 @@ with torch.no_grad():
     avg_ssim = 0.0
     avg_lpips = 0.0
     n_images_gen = 0
+
+    c2ws_train = dset_train.render_c2w.to(device=device) if args.render_path else dset_train.c2w.to(device=device)
     c2ws = dset.render_c2w.to(device=device) if args.render_path else dset.c2w.to(device=device)
+
+    center_pt = torch.mean(c2ws[:,:3,3], axis=0)
+    directions_train = (c2ws_train[:,:3,3] - center_pt)
+    directions = (c2ws[:,:3,3] - center_pt)
+    directions_train = directions_train / torch.linalg.vector_norm(directions_train, keepdim=True, dim=1)
+    directions = directions / torch.linalg.vector_norm(directions, keepdim=True, dim=1)
+    cos_dist = torch.matmul(directions, directions_train.transpose(0,1))
+    cos_dist = torch.max(cos_dist, 1)[0]
+    angles = torch.acos(cos_dist).cpu().numpy()
+
     # DEBUGGING
     #  rad = [1.496031746031746, 1.6613756613756614, 1.0]
     #  half_sz = [grid.links.size(0) // 2, grid.links.size(1) // 2]
@@ -170,6 +185,9 @@ with torch.no_grad():
 
     frames = []
     #  im_gt_all = dset.gt.to(device=device)
+    psnrs = []
+    ssims = []
+    lpips_is = []
 
     for img_id in tqdm(range(0, n_images, img_eval_interval)):
         dset_h, dset_w = dset.get_image_size(img_id)
@@ -207,8 +225,11 @@ with torch.no_grad():
                             im.permute([2, 0, 1]).contiguous(), normalize=True).item()
                     avg_lpips += lpips_i
                     print(img_id, 'PSNR', psnr, 'SSIM', ssim, 'LPIPS', lpips_i)
+                    lpips_is.append(lpips_i)
                 else:
                     print(img_id, 'PSNR', psnr, 'SSIM', ssim)
+                psnrs.append(psnr)
+                ssims.append(ssim)
         img_path = path.join(render_dir, f'{img_id:04d}.png');
         im = im.cpu().numpy()
         if not args.render_path:
@@ -222,6 +243,27 @@ with torch.no_grad():
                 frames.append(im)
         im = None
         n_images_gen += 1
+    
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("PSNR")
+    plt.scatter(angles,psnrs)
+    plt.savefig(path.join(render_dir, 'PSNR_Angle.png'))
+
+
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("SSIM")
+    plt.scatter(angles,ssims)
+    plt.savefig(path.join(render_dir, 'SSIM_Angle.png'))
+
+
+    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
+    plt.xlabel("Angle from nearest training sample")
+    plt.ylabel("LPIPS")
+    plt.scatter(angles,lpips_is)
+    plt.savefig(path.join(render_dir, 'LPIPS_Angle.png'))
+
     if want_metrics:
         print('AVERAGES')
 
