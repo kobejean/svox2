@@ -277,6 +277,17 @@ with torch.no_grad():
     frames, psnrs, ssims, lpips_is = render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, render_dir, want_metrics)
     frames_train, psnrs_train, ssims_train, lpips_is_train = render_images_and_measure_metrics(dset_train, c2ws_train, n_images_train, 1, render_dir, want_metrics, save_files=False)
 
+    np.save(path.join(render_dir, 'psnr.npy'), psnrs)
+    np.save(path.join(render_dir, 'ssim.npy'), ssims)
+    np.save(path.join(render_dir, 'lpips.npy'), lpips_is)
+
+    np.save(path.join(render_dir, 'psnr_train.npy'), psnrs_train)
+    np.save(path.join(render_dir, 'ssim_train.npy'), ssims_train)
+    np.save(path.join(render_dir, 'lpips_train.npy'), lpips_is_train)
+
+    np.save(path.join(render_dir, 'c2ws.npy'), c2ws.cpu().numpy())
+    np.save(path.join(render_dir, 'c2ws_train.npy'), c2ws_train.cpu().numpy())
+
     psnr_diff = psnrs_train[closest_train_index] - psnrs
     ssims_diff = ssims_train[closest_train_index] - ssims
     lpips_i_diff = lpips_is_train[closest_train_index] - lpips_is

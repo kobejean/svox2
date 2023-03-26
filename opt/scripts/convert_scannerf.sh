@@ -1,9 +1,8 @@
-TRAIN_JSON="train_all_100.json"
+TRAIN_JSON="train_all_500.json"
 VAL_JSON="val_all.json"
 TEST_JSON="test_all.json"
 SCANNERF_DIR="/home/ccl/Datasets/NeRF/ScanNerf"
-OUT_DIR="/home/ccl/Datasets/NeRF/ScanNerf-NSVF/all_100"
-SCENES=`ls $SCANNERF_DIR`
+OUT_DIR="/home/ccl/Datasets/NeRF/ScanNerf-NSVF/all_500"
 
 for SCENE_PATH in $SCANNERF_DIR/*; do
   SCENE=`basename $SCENE_PATH`

@@ -8,3 +8,4 @@ build
 .eggs
 svox2.egg-info
 *.so
+.ipynb_checkpoints
