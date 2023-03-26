@@ -2,7 +2,7 @@
 {
     "eval": true,
     "data_root": "/home/ccl/VQRF/data/nerf_synthetic",
-    "train_root": "/home/ccl/svox2/opt/ckpt_auto/128_to_256_fasttv",
+    "train_root": "/home/ccl/Code/svox2/opt/ckpt_auto/128_to_256_fasttv",
     "variables": {
         "scene": ["images", "pose"]
     },

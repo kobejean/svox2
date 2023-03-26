@@ -1,7 +1,7 @@
 {
     "eval": true,
-    "data_root": "/home/ccl/svox2/opt/testData",
-    "train_root": "/home/ccl/svox2/opt/ckpt_auto/256_to_512_fasttv",
+    "data_root": "/home/ccl/Code/svox2/opt/testData",
+    "train_root": "/home/ccl/Code/svox2/opt/ckpt_auto/256_to_512_fasttv",
     "variables": {
         "scene": ["images"]
     },
