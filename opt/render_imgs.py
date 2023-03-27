@@ -81,7 +81,28 @@ config_util.maybe_merge_config_file(args, allow_invalid=True)
 device = 'cuda:0'
 
 
-def render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, render_dir, want_metrics, save_files=True):  
+def render_images_and_measure_metrics(dset, render_dir, want_metrics):  
+    n_images = dset.render_c2w.size(0) if args.render_path else dset.n_images
+    img_eval_interval = max(n_images // args.n_eval, 1)
+
+    c2ws = dset.render_c2w.to(device=device) if args.render_path else dset.c2w.to(device=device)
+    # DEBUGGING
+    #  rad = [1.496031746031746, 1.6613756613756614, 1.0]
+    #  half_sz = [grid.links.size(0) // 2, grid.links.size(1) // 2]
+    #  pad_size_x = int(half_sz[0] - half_sz[0] / 1.496031746031746)
+    #  pad_size_y = int(half_sz[1] - half_sz[1] / 1.6613756613756614)
+    #  print(pad_size_x, pad_size_y)
+    #  grid.links[:pad_size_x] = -1
+    #  grid.links[-pad_size_x:] = -1
+    #  grid.links[:, :pad_size_y] = -1
+    #  grid.links[:, -pad_size_y:] = -1
+    #  grid.links[:, :, -8:] = -1
+
+    #  LAYER = -16
+    #  grid.links[:, :, :LAYER] = -1
+    #  grid.links[:, :, LAYER+1:] = -1
+
+    #  im_gt_all = dset.gt.to(device=device)
 
     avg_psnr = 0.0
     avg_ssim = 0.0
@@ -134,22 +155,21 @@ def render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, r
                 psnrs.append(psnr)
                 ssims.append(ssim)
         
-        if save_files:
-            img_path = path.join(render_dir, f'{img_id:04d}.png');
-            im = im.cpu().numpy()
-            if not args.render_path:
-                im_gt = dset.gt[img_id].numpy()
-                im = np.concatenate([im_gt, im], axis=1)
-            if not args.timing:
-                im = (im * 255).astype(np.uint8)
-                if not args.no_imsave:
-                    imageio.imwrite(img_path,im)
-                if not args.no_vid:
-                    frames.append(im)
-            im = None
+        img_path = path.join(render_dir, f'{img_id:04d}.png');
+        im = im.cpu().numpy()
+        if not args.render_path:
+            im_gt = dset.gt[img_id].numpy()
+            im = np.concatenate([im_gt, im], axis=1)
+        if not args.timing:
+            im = (im * 255).astype(np.uint8)
+            if not args.no_imsave:
+                imageio.imwrite(img_path,im)
+            if not args.no_vid:
+                frames.append(im)
+        im = None
         n_images_gen += 1
     
-    if want_metrics and save_files:
+    if want_metrics:
         print('AVERAGES')
 
         avg_psnr /= n_images_gen
@@ -166,11 +186,16 @@ def render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, r
                 print('LPIPS:', avg_lpips)
                 with open(path.join(render_dir, 'lpips.txt'), 'w') as f:
                     f.write(str(avg_lpips))
-    if not args.no_vid and len(frames) and save_files:
+    if not args.no_vid and len(frames):
         vid_path = render_dir + '.mp4'
         imageio.mimwrite(vid_path, frames, fps=args.fps, macro_block_size=8)  # pip install imageio-ffmpeg
 
-    return frames, np.array(psnrs), np.array(ssims), np.array(lpips_is)
+    psnrs, ssims, lpips_is = np.array(psnrs), np.array(ssims), np.array(lpips_is)
+    np.save(path.join(render_dir, 'psnr.npy'), psnrs)
+    np.save(path.join(render_dir, 'ssim.npy'), ssims)
+    np.save(path.join(render_dir, 'lpips.npy'), lpips_is)
+    np.save(path.join(render_dir, 'c2ws.npy'), c2ws.cpu().numpy())
+    
 
 if args.timing:
     args.no_lpips = True
@@ -183,12 +208,14 @@ if not args.no_lpips:
 if not path.isfile(args.ckpt):
     args.ckpt = path.join(args.ckpt, 'ckpt.npz')
 
-render_dir = path.join(path.dirname(args.ckpt),
-            'train_renders' if args.train else 'test_renders')
+render_dir = path.join(path.dirname(args.ckpt), 'test_renders')
+render_dir_train = path.join(path.dirname(args.ckpt), 'train_renders')
+
 want_metrics = True
 if args.render_path:
     assert not args.train
     render_dir += '_path'
+    render_dir_train += '_path'
     want_metrics = False
 
 # Handle various image transforms
@@ -197,8 +224,10 @@ if not args.render_path:
     args.crop = 1.0
 if args.crop != 1.0:
     render_dir += f'_crop{args.crop}'
+    render_dir_train += f'_crop{args.crop}'
 if args.ray_len:
     render_dir += f'_raylen'
+    render_dir_train += f'_raylen'
     want_metrics = False
 
 dset_train = datasets[args.dataset_type](args.data_dir, split="train",
@@ -213,12 +242,14 @@ if grid.use_background:
         #  grid.background_cubemap.data = grid.background_cubemap.data.cuda()
         grid.background_data.data[..., -1] = 0.0
         render_dir += '_nobg'
+        render_dir_train += '_nobg'
     if args.nofg:
         grid.density_data.data[:] = 0.0
         #  grid.sh_data.data[..., 0] = 1.0 / svox2.utils.SH_C0
         #  grid.sh_data.data[..., 9] = 1.0 / svox2.utils.SH_C0
         #  grid.sh_data.data[..., 18] = 1.0 / svox2.utils.SH_C0
         render_dir += '_nofg'
+        render_dir_train += '_nofg'
 
     # DEBUG
     #  grid.links.data[grid.links.size(0)//2:] = -1
@@ -229,10 +260,13 @@ config_util.setup_render_opts(grid.opt, args)
 if args.blackbg:
     print('Forcing black bg')
     render_dir += '_blackbg'
+    render_dir_train += '_blackbg'
     grid.opt.background_brightness = 0.0
 
 print('Writing to', render_dir)
 os.makedirs(render_dir, exist_ok=True)
+print('Writing to', render_dir_train)
+os.makedirs(render_dir_train, exist_ok=True)
 
 if not args.no_imsave:
     print('Will write out all frames as PNG (this take most of the time)')
@@ -240,103 +274,5 @@ if not args.no_imsave:
 # NOTE: no_grad enables the fast image-level rendering kernel for cuvol backend only
 # other backends will manually generate rays per frame (slow)
 with torch.no_grad():
-    n_images_train = dset_train.render_c2w.size(0) if args.render_path else dset_train.n_images
-    n_images = dset.render_c2w.size(0) if args.render_path else dset.n_images
-    img_eval_interval = max(n_images // args.n_eval, 1)
-
-    c2ws_train = dset_train.render_c2w.to(device=device) if args.render_path else dset_train.c2w.to(device=device)
-    c2ws = dset.render_c2w.to(device=device) if args.render_path else dset.c2w.to(device=device)
-
-    center_pt = torch.mean(c2ws[:,:3,3], axis=0)
-    directions_train = (c2ws_train[:,:3,3] - center_pt)
-    directions = (c2ws[:,:3,3] - center_pt)
-    directions_train = directions_train / torch.linalg.vector_norm(directions_train, keepdim=True, dim=1)
-    directions = directions / torch.linalg.vector_norm(directions, keepdim=True, dim=1)
-    cos_dist = torch.matmul(directions, directions_train.transpose(0,1))
-    cos_dist, closest_train_index = torch.max(cos_dist, 1)
-    angles = torch.acos(cos_dist).cpu().numpy()
-    closest_train_index = closest_train_index.cpu().numpy()
-
-    # DEBUGGING
-    #  rad = [1.496031746031746, 1.6613756613756614, 1.0]
-    #  half_sz = [grid.links.size(0) // 2, grid.links.size(1) // 2]
-    #  pad_size_x = int(half_sz[0] - half_sz[0] / 1.496031746031746)
-    #  pad_size_y = int(half_sz[1] - half_sz[1] / 1.6613756613756614)
-    #  print(pad_size_x, pad_size_y)
-    #  grid.links[:pad_size_x] = -1
-    #  grid.links[-pad_size_x:] = -1
-    #  grid.links[:, :pad_size_y] = -1
-    #  grid.links[:, -pad_size_y:] = -1
-    #  grid.links[:, :, -8:] = -1
-
-    #  LAYER = -16
-    #  grid.links[:, :, :LAYER] = -1
-    #  grid.links[:, :, LAYER+1:] = -1
-
-    #  im_gt_all = dset.gt.to(device=device)
-    frames, psnrs, ssims, lpips_is = render_images_and_measure_metrics(dset, c2ws, n_images, img_eval_interval, render_dir, want_metrics)
-    frames_train, psnrs_train, ssims_train, lpips_is_train = render_images_and_measure_metrics(dset_train, c2ws_train, n_images_train, 1, render_dir, want_metrics, save_files=False)
-
-    np.save(path.join(render_dir, 'psnr.npy'), psnrs)
-    np.save(path.join(render_dir, 'ssim.npy'), ssims)
-    np.save(path.join(render_dir, 'lpips.npy'), lpips_is)
-
-    np.save(path.join(render_dir, 'psnr_train.npy'), psnrs_train)
-    np.save(path.join(render_dir, 'ssim_train.npy'), ssims_train)
-    np.save(path.join(render_dir, 'lpips_train.npy'), lpips_is_train)
-
-    np.save(path.join(render_dir, 'c2ws.npy'), c2ws.cpu().numpy())
-    np.save(path.join(render_dir, 'c2ws_train.npy'), c2ws_train.cpu().numpy())
-
-    psnr_diff = psnrs_train[closest_train_index] - psnrs
-    ssims_diff = ssims_train[closest_train_index] - ssims
-    lpips_i_diff = lpips_is_train[closest_train_index] - lpips_is
-
-    
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("PSNR diff (train - test)")
-    plt.scatter(angles,psnr_diff)
-    plt.savefig(path.join(render_dir, 'PSNR_Diff_Angle.png'))
-    plt.cla()
-
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("SSIM diff (train - test)")
-    plt.scatter(angles,ssims_diff)
-    plt.savefig(path.join(render_dir, 'SSIM_Diff_Angle.png'))
-    plt.cla()
-
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("LPIPS diff (train - test)")
-    plt.scatter(angles,lpips_i_diff)
-    plt.savefig(path.join(render_dir, 'LPIPS_Diff_Angle.png'))
-    plt.cla()
-
-
-    
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("PSNR")
-    plt.scatter(angles,psnrs)
-    plt.savefig(path.join(render_dir, 'PSNR_Angle.png'))
-    plt.cla()
-
-
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("SSIM")
-    plt.scatter(angles,ssims)
-    plt.savefig(path.join(render_dir, 'SSIM_Angle.png'))
-    plt.cla()
-
-
-    plt.title(f"Scene: {os.path.basename(args.data_dir)}")
-    plt.xlabel("Angle from nearest training sample")
-    plt.ylabel("LPIPS")
-    plt.scatter(angles,lpips_is)
-    plt.savefig(path.join(render_dir, 'LPIPS_Angle.png'))
-    plt.cla()
-
-
+    render_images_and_measure_metrics(dset, render_dir, want_metrics)
+    render_images_and_measure_metrics(dset_train, render_dir_train, want_metrics)
