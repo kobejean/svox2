@@ -135,6 +135,10 @@ you will need to change `train_root` and `data_root` in `tasks/eval.json`, then 
 python autotune.py -g '<space delimited GPU ids>' tasks/eval.json
 ```
 
+```sh
+python autotune.py -g '0' tasks/eval_scannerf_mid.json
+```
+
 For forward-facing scenes
 ```sh
 python autotune.py -g '<space delimited GPU ids>' tasks/eval_ff.json

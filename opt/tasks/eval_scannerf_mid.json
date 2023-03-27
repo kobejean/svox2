@@ -1,0 +1,25 @@
+{
+    "eval": true,
+    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF",
+    "train_root": "/home/ccl/Code/svox2/opt/ckpt_auto/256_to_512_scannerf_test",
+    "variables": {
+        "scene": ["airplane1", "airplane2", "brontosaurus", "bulldozer1", "bulldozer2", "cheetah", "dump_truck1", "dump_truck2", "elephant", "excavator", "forklift", "giraffe", "helicopter1", "helicopter2", "lego", "lion", "plant1", "plant2", "plant3", "plant4", "plant5", "plant6", "plant7", "plant8", "plant9", "roadroller", "shark", "spinosaurus", "stegosaurus", "tiger", "tractor", "trex", "triceratops", "truck", "zebra"]
+    },
+    "tasks": [{
+        "train_dir": "all_100/{scene}",
+        "data_dir": "all_100/{scene}",
+        "config": "configs/scannerf_mid.json"
+    },{
+        "train_dir": "all/{scene}",
+        "data_dir": "all/{scene}",
+        "config": "configs/scannerf_mid.json"
+    },{
+        "train_dir": "all_250/{scene}",
+        "data_dir": "all_250/{scene}",
+        "config": "configs/scannerf_mid.json"
+    },{
+        "train_dir": "all_500/{scene}",
+        "data_dir": "all_500/{scene}",
+        "config": "configs/scannerf_mid.json"
+    }]
+}
