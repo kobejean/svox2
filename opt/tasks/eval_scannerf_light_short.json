@@ -1,0 +1,25 @@
+{
+    "eval": true,
+    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF",
+    "train_root": "/home/ccl/Code/svox2/opt/ckpt_auto/scannerf_light_short",
+    "variables": {
+        "scene": ["airplane1", "brontosaurus", "lego"]
+    },
+    "tasks": [{
+        "train_dir": "all_100/{scene}",
+        "data_dir": "all_100/{scene}",
+        "config": "configs/scannerf_light.json"
+    },{
+        "train_dir": "all/{scene}",
+        "data_dir": "all/{scene}",
+        "config": "configs/scannerf_light.json"
+    },{
+        "train_dir": "all_250/{scene}",
+        "data_dir": "all_250/{scene}",
+        "config": "configs/scannerf_light.json"
+    },{
+        "train_dir": "all_500/{scene}",
+        "data_dir": "all_500/{scene}",
+        "config": "configs/scannerf_light.json"
+    }]
+}
