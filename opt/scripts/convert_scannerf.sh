@@ -3,7 +3,7 @@ VAL_JSON="val_all.json"
 TEST_JSON="test_all.json"
 SCANNERF_DIR="/home/ccl/Datasets/NeRF/ScanNerf"
 
-for SUFFIX in all_25_random all_50_random; do
+for SUFFIX in equator_10 equator_25 equator_50; do
   TRAIN_JSON="train_$SUFFIX.json"
   OUT_DIR="/home/ccl/Datasets/NeRF/ScanNerf-NSVF/$SUFFIX"
   for SCENE_PATH in $SCANNERF_DIR/*; do
