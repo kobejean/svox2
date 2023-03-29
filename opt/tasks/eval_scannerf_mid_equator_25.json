@@ -1,0 +1,13 @@
+{
+    "eval": true,
+    "data_root": "/home/ccl/Datasets/NeRF/ScanNerf-NSVF",
+    "train_root": "/home/ccl/Code/svox2/opt/ckpt_auto/scannerf_mid_equator_25",
+    "variables": {
+        "scene": ["airplane1"]
+    },
+    "tasks": [{
+        "train_dir": "equator_25/{scene}",
+        "data_dir": "equator_25/{scene}",
+        "config": "configs/scannerf_mid.json"
+    }]
+}
