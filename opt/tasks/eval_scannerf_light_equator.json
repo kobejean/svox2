@@ -7,28 +7,18 @@
     },
     "tasks": [
         {
+            "train_dir": "equator_10/{scene}",
+            "data_dir": "equator_10/{scene}",
+            "config": "configs/scannerf_light.json"
+        },
+        {
             "train_dir": "equator_25/{scene}",
             "data_dir": "equator_25/{scene}",
             "config": "configs/scannerf_light.json"
         },
         {
-            "train_dir": "all_100/{scene}",
-            "data_dir": "all_100/{scene}",
-            "config": "configs/scannerf_light.json"
-        },
-        {
-            "train_dir": "all/{scene}",
-            "data_dir": "all/{scene}",
-            "config": "configs/scannerf_light.json"
-        },
-        {
-            "train_dir": "all_250/{scene}",
-            "data_dir": "all_250/{scene}",
-            "config": "configs/scannerf_light.json"
-        },
-        {
-            "train_dir": "all_500/{scene}",
-            "data_dir": "all_500/{scene}",
+            "train_dir": "equator_50/{scene}",
+            "data_dir": "equator_50/{scene}",
             "config": "configs/scannerf_light.json"
         }
     ]
