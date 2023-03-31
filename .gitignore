@@ -10,3 +10,4 @@ svox2.egg-info
 *.so
 .ipynb_checkpoints
 notebooks/yuki/plots/
+notebooks/yuki/make_json_horizontal/test
