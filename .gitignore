@@ -9,3 +9,4 @@ build
 svox2.egg-info
 *.so
 .ipynb_checkpoints
+notebooks/yuki/plots/
