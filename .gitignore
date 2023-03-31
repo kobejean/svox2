@@ -11,3 +11,7 @@ svox2.egg-info
 .ipynb_checkpoints
 notebooks/yuki/plots/
 notebooks/yuki/make_json_horizontal/test
+notebooks/yuki/NeRF/plots/
+notebooks/yuki/NeRF/ScanNerf-NSVF
+notebooks/yuki/NeRF/make_json_equator/json_equator
+notebooks/yuki/NeRF/eval/eval_scannerf_light_horizontal

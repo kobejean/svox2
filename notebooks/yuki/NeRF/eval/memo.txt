@@ -1,0 +1,6 @@
+nvidia-smi
+# check cuda
+
+python autotune.py -g '0' tasks/eval_scannerf_light_horizontal.json 
+
+conda activate plenoxel
